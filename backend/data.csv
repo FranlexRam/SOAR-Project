@@ -1,0 +1,4 @@
+tenant_id,detected_at,country_code,risk_level,attack_vector,threat_type,source_ip,soar_action,status,impact
+C-001,2026-07-11T10:00:00,US,CRITICAL,Email,Ransomware,192.168.1.50,Auto-Block,Contained,High
+C-001,2026-07-11T10:05:00,DE,HIGH,Web,Phishing,10.0.0.15,Isolate,In Analysis,Medium
+C-001,2026-07-11T10:10:00,JP,LOW,Network,Brute Force,172.16.0.20,Log,Closed,Low
