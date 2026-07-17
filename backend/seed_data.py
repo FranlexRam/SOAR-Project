@@ -5,11 +5,18 @@ import models
 def ingest_data(csv_file_path):
     db = SessionLocal()
     try:
+        # 1. Asegurar que exista un Tenant por defecto (ID 1)
+        # Esto evita errores de ForeignKey al insertar amenazas
+        default_tenant = db.query(models.Tenant).filter(models.Tenant.id == 1).first()
+        if not default_tenant:
+            default_tenant = models.Tenant(id=1, name="Default Tenant", unique_token="TOKEN-12345")
+            db.add(default_tenant)
+            db.commit()
+
         with open(csv_file_path, mode='r', encoding='utf-8') as file:
             reader = csv.DictReader(file)
             for row in reader:
-                # Nota: Si tu CSV tiene 'C-001', esto tomará el número 1. 
-                # Si tienes varios tenants, ajustaremos esto pronto.
+                # Mantenemos tu lógica de limpieza de ID
                 tenant_id_val = int(''.join(filter(str.isdigit, row['tenant_id']))) 
                 
                 threat = models.Threat(
@@ -26,7 +33,7 @@ def ingest_data(csv_file_path):
                 )
                 db.add(threat)
             db.commit()
-            print("¡Datos cargados exitosamente desde el CSV!")
+            print("¡Datos cargados exitosamente junto con el Tenant inicial!")
     except Exception as e:
         print(f"Error al cargar datos: {e}")
     finally:
@@ -34,8 +41,9 @@ def ingest_data(csv_file_path):
 
 if __name__ == "__main__":
     db = SessionLocal()
-    # Limpiamos usando la nueva estructura
+    # Limpiamos todo usando la nueva estructura (borramos en orden inverso)
     db.query(models.Threat).delete()
+    db.query(models.Tenant).delete()
     db.commit()
     db.close()
     
