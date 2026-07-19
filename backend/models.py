@@ -62,3 +62,11 @@ class ActionLog(Base):
     action_taken = Column(String)
     status = Column(String) 
     timestamp = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+class Blacklist(Base):
+    __tablename__ = "blacklist"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), index=True)
+    ip_address = Column(String, index=True)
+    added_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))

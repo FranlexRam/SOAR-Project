@@ -7,7 +7,11 @@ from datetime import datetime
 from jose import jwt
 from database import SessionLocal, engine
 import models
+import threat_intel 
 from security import get_password_hash, verify_password, create_access_token, SECRET_KEY, ALGORITHM
+
+# Ya no definimos Blacklist aquí, se importa a través de 'models'
+models.Base.metadata.create_all(bind=engine)
 
 # --- SCHEMAS ---
 class UserCreate(BaseModel):
@@ -24,7 +28,6 @@ class RuleCreate(BaseModel):
     action: str
     is_active: bool = True
 
-# Esquema para reportar nuevas amenazas
 class ThreatReport(BaseModel):
     threat_type: str
     source_ip: str
@@ -32,9 +35,6 @@ class ThreatReport(BaseModel):
     risk_level: str
     attack_vector: str
     impact: str
-
-# Crear las tablas
-models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
@@ -113,7 +113,7 @@ def get_stats(db: Session = Depends(get_db), tenant: models.Tenant = Depends(get
 def get_threats(db: Session = Depends(get_db), tenant: models.Tenant = Depends(get_current_tenant)):
     return db.query(models.Threat).filter(models.Threat.tenant_id == tenant.id).all()
 
-# --- ENDPOINTS FASE 2 ---
+# --- ENDPOINTS FASE 2 & INTEL ---
 @app.post("/rules", status_code=201)
 def create_rule(rule: RuleCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     db_rule = models.Rule(tenant_id=current_user.tenant_id, threat_type=rule.threat_type, action=rule.action, is_active=rule.is_active)
@@ -122,18 +122,35 @@ def create_rule(rule: RuleCreate, db: Session = Depends(get_db), current_user: m
     return db_rule
 
 @app.post("/threats/report", status_code=201)
-def report_threat(report: ThreatReport, db: Session = Depends(get_db), tenant: models.Tenant = Depends(get_current_tenant)):
-    # 1. ORQUESTADOR: Buscar si existe una regla automática
+async def report_threat(report: ThreatReport, db: Session = Depends(get_db), tenant: models.Tenant = Depends(get_current_tenant)):
+    # 1. VERIFICACIÓN DE LISTA NEGRA LOCAL
+    is_blacklisted = db.query(models.Blacklist).filter(
+        models.Blacklist.ip_address == report.source_ip,
+        models.Blacklist.tenant_id == tenant.id
+    ).first()
+    
+    final_risk = report.risk_level
+    reputation_score = 0
+    
+    if is_blacklisted:
+        final_risk = "CRITICAL"
+        reputation_score = 100 
+    else:
+        # 2. ENRIQUECIMIENTO (Solo si no está en lista negra)
+        reputation_score = await threat_intel.check_ip_reputation(report.source_ip)
+        if reputation_score > 75:
+            final_risk = "CRITICAL"
+        
+    # 3. ORQUESTADOR: Buscar regla
     rule = db.query(models.Rule).filter(
         models.Rule.threat_type == report.threat_type,
         models.Rule.tenant_id == tenant.id,
         models.Rule.is_active == True
     ).first()
     
-    # 2. Asignar acción automática o dejar en "MANUAL"
     action = rule.action if rule else "MANUAL"
     
-    # 3. Guardar la amenaza
+    # 4. Guardar amenaza
     new_threat = models.Threat(
         tenant_id=tenant.id,
         threat_type=report.threat_type,
@@ -141,7 +158,7 @@ def report_threat(report: ThreatReport, db: Session = Depends(get_db), tenant: m
         source_ip=report.source_ip,
         country_code=report.country_code,
         soar_action=action,
-        risk_level=report.risk_level,
+        risk_level=final_risk,
         status="DETECTED",
         attack_vector=report.attack_vector,
         impact=report.impact
@@ -150,7 +167,7 @@ def report_threat(report: ThreatReport, db: Session = Depends(get_db), tenant: m
     db.commit()
     db.refresh(new_threat)
     
-    # 4. REGISTRAR LOG DE ACCIÓN
+    # 5. REGISTRAR LOG
     new_log = models.ActionLog(
         tenant_id=tenant.id,
         threat_id=new_threat.id,
@@ -160,4 +177,9 @@ def report_threat(report: ThreatReport, db: Session = Depends(get_db), tenant: m
     db.add(new_log)
     db.commit()
     
-    return {"message": "Amenaza procesada y log registrada", "soar_action_taken": action}
+    return {
+        "message": "Amenaza procesada, enriquecida/bloqueada y log registrada", 
+        "soar_action_taken": action, 
+        "intel_score": reputation_score,
+        "source": "BLACKLIST_LOCAL" if is_blacklisted else "ABUSEIPDB_API"
+    }
