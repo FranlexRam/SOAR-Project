@@ -1,6 +1,7 @@
 from sqlalchemy import Column, String, DateTime, Integer, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from database import Base
+import datetime
 
 class Tenant(Base):
     __tablename__ = "tenants"
@@ -10,10 +11,9 @@ class Tenant(Base):
     unique_token = Column(String, unique=True, index=True)
     is_active = Column(Boolean, default=True)
     
-    # Relación: Un tenant puede tener muchas amenazas
     threats = relationship("Threat", back_populates="tenant")
-    # Relación: Un tenant puede tener muchos usuarios
     users = relationship("User", back_populates="tenant")
+    rules = relationship("Rule", back_populates="tenant")
 
 class User(Base):
     __tablename__ = "users"
@@ -29,7 +29,7 @@ class Threat(Base):
     __tablename__ = "threats"
     
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    tenant_id = Column(Integer, ForeignKey("tenants.id"), index=True) # ForeignKey real
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), index=True)
     threat_type = Column(String)
     detected_at = Column(DateTime)
     source_ip = Column(String)
@@ -41,3 +41,24 @@ class Threat(Base):
     impact = Column(String)
     
     tenant = relationship("Tenant", back_populates="threats")
+
+class Rule(Base):
+    __tablename__ = "rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), index=True)
+    threat_type = Column(String, index=True) 
+    action = Column(String)                   
+    is_active = Column(Boolean, default=True)
+    
+    tenant = relationship("Tenant", back_populates="rules")
+
+class ActionLog(Base):
+    __tablename__ = "action_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"))
+    threat_id = Column(Integer, ForeignKey("threats.id"))
+    action_taken = Column(String)
+    status = Column(String) 
+    timestamp = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
