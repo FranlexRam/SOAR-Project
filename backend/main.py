@@ -8,10 +8,23 @@ from jose import jwt
 from database import SessionLocal, engine
 import models
 import threat_intel 
+import os # Import necesario para variables de entorno
+from dotenv import load_dotenv # Import necesario para cargar .env
 from security import get_password_hash, verify_password, create_access_token, SECRET_KEY, ALGORITHM
+# --- IMPORT NUEVO ---
+from services.analytics import AnalyticsService
+# --- IMPORT IA ---
+import google.generativeai as genai
+
+# Carga las variables desde el archivo .env
+load_dotenv()
 
 # Ya no definimos Blacklist aquí, se importa a través de 'models'
 models.Base.metadata.create_all(bind=engine)
+
+# --- CONFIGURACIÓN IA SEGURA ---
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 # --- SCHEMAS ---
 class UserCreate(BaseModel):
@@ -112,6 +125,32 @@ def get_stats(db: Session = Depends(get_db), tenant: models.Tenant = Depends(get
 @app.get("/threats")
 def get_threats(db: Session = Depends(get_db), tenant: models.Tenant = Depends(get_current_tenant)):
     return db.query(models.Threat).filter(models.Threat.tenant_id == tenant.id).all()
+
+# --- ENDPOINTS FASE 3 (Analytics & IA) ---
+@app.get("/analytics/summary")
+def get_analytics_summary(
+    db: Session = Depends(get_db), 
+    tenant: models.Tenant = Depends(get_current_tenant)
+):
+    trends = AnalyticsService.get_tenant_threat_trends(db, tenant.id)
+    success_rate = AnalyticsService.get_action_success_rate(db, tenant.id)
+    return {
+        "trends": trends,
+        "success_rate": success_rate
+    }
+
+@app.post("/analytics/generate-report")
+def generate_report(
+    db: Session = Depends(get_db),
+    tenant: models.Tenant = Depends(get_current_tenant)
+):
+    # Obtenemos el contexto preparado por el servicio
+    context = AnalyticsService.get_analytics_context(db, tenant.id)
+    
+    # Solicitud a Gemini
+    response = model.generate_content(context)
+    
+    return {"reporte": response.text}
 
 # --- ENDPOINTS FASE 2 & INTEL ---
 @app.post("/rules", status_code=201)
