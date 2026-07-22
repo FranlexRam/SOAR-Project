@@ -8,23 +8,38 @@ from jose import jwt
 from database import SessionLocal, engine
 import models
 import threat_intel 
-import os # Import necesario para variables de entorno
-from dotenv import load_dotenv # Import necesario para cargar .env
+import os
+from pathlib import Path
+from dotenv import load_dotenv
 from security import get_password_hash, verify_password, create_access_token, SECRET_KEY, ALGORITHM
 # --- IMPORT NUEVO ---
 from services.analytics import AnalyticsService
 # --- IMPORT IA ---
 import google.generativeai as genai
 
-# Carga las variables desde el archivo .env
-load_dotenv()
+# --- CARGA EXPLÍCITA DEL .ENV DESDE LA RAÍZ DEL PROYECTO ---
+BASE_DIR = Path(__file__).resolve().parent.parent
+ENV_PATH = BASE_DIR / ".env"
+load_dotenv(dotenv_path=ENV_PATH)
 
 # Ya no definimos Blacklist aquí, se importa a través de 'models'
 models.Base.metadata.create_all(bind=engine)
 
 # --- CONFIGURACIÓN IA SEGURA ---
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-model = genai.GenerativeModel('gemini-1.5-flash')
+
+# --- DIAGNÓSTICO TEMPORAL DE MODELOS ---
+print("--- BUSCANDO MODELOS DISPONIBLES EN TU API KEY ---")
+try:
+    for m in genai.list_models():
+        if 'generateContent' in m.supported_generation_methods:
+            print(f"-> Modelo compatible encontrado: {m.name}")
+except Exception as e:
+    print(f"Error al listar modelos (revisa tu GEMINI_API_KEY): {e}")
+print("--------------------------------------------------")
+
+# Inicializamos con el modelo verificado
+model = genai.GenerativeModel('gemini-3.5-flash')
 
 # --- SCHEMAS ---
 class UserCreate(BaseModel):
@@ -144,12 +159,8 @@ def generate_report(
     db: Session = Depends(get_db),
     tenant: models.Tenant = Depends(get_current_tenant)
 ):
-    # Obtenemos el contexto preparado por el servicio
     context = AnalyticsService.get_analytics_context(db, tenant.id)
-    
-    # Solicitud a Gemini
     response = model.generate_content(context)
-    
     return {"reporte": response.text}
 
 # --- ENDPOINTS FASE 2 & INTEL ---
@@ -162,7 +173,6 @@ def create_rule(rule: RuleCreate, db: Session = Depends(get_db), current_user: m
 
 @app.post("/threats/report", status_code=201)
 async def report_threat(report: ThreatReport, db: Session = Depends(get_db), tenant: models.Tenant = Depends(get_current_tenant)):
-    # 1. VERIFICACIÓN DE LISTA NEGRA LOCAL
     is_blacklisted = db.query(models.Blacklist).filter(
         models.Blacklist.ip_address == report.source_ip,
         models.Blacklist.tenant_id == tenant.id
@@ -175,12 +185,10 @@ async def report_threat(report: ThreatReport, db: Session = Depends(get_db), ten
         final_risk = "CRITICAL"
         reputation_score = 100 
     else:
-        # 2. ENRIQUECIMIENTO (Solo si no está en lista negra)
         reputation_score = await threat_intel.check_ip_reputation(report.source_ip)
         if reputation_score > 75:
             final_risk = "CRITICAL"
         
-    # 3. ORQUESTADOR: Buscar regla
     rule = db.query(models.Rule).filter(
         models.Rule.threat_type == report.threat_type,
         models.Rule.tenant_id == tenant.id,
@@ -189,7 +197,6 @@ async def report_threat(report: ThreatReport, db: Session = Depends(get_db), ten
     
     action = rule.action if rule else "MANUAL"
     
-    # 4. Guardar amenaza
     new_threat = models.Threat(
         tenant_id=tenant.id,
         threat_type=report.threat_type,
@@ -206,7 +213,6 @@ async def report_threat(report: ThreatReport, db: Session = Depends(get_db), ten
     db.commit()
     db.refresh(new_threat)
     
-    # 5. REGISTRAR LOG
     new_log = models.ActionLog(
         tenant_id=tenant.id,
         threat_id=new_threat.id,
