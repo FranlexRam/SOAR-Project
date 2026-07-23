@@ -228,3 +228,63 @@ async def report_threat(report: ThreatReport, db: Session = Depends(get_db), ten
         "intel_score": reputation_score,
         "source": "BLACKLIST_LOCAL" if is_blacklisted else "ABUSEIPDB_API"
     }
+
+# --- ENDPOINTS ADICIONALES PARA EL MONITOR EN TIEMPO REAL (FASE 4.2) ---
+
+@app.get("/api/threats/active")
+def get_active_threats(
+    db: Session = Depends(get_db), 
+    tenant: models.Tenant = Depends(get_current_tenant)
+):
+    threats = db.query(models.Threat).filter(
+        models.Threat.tenant_id == tenant.id,
+        models.Threat.status != "Resolved"
+    ).all()
+    
+    result = []
+    for t in threats:
+        result.append({
+            "type": t.threat_type,
+            "detected": t.detected_at.strftime("%Y-%m-%d %H:%M:%S") if t.detected_at else "",
+            "sourceIp": t.source_ip,
+            "soarAction": t.soar_action or "Pending Action",
+            "riskLevel": t.risk_level,
+            "status": "Contained" if t.status == "CONTAINED" else "In Analysis",
+            "incidentId": f"T-{t.id}",
+            "attackVector": t.attack_vector or "Web Endpoint",
+            "impact": t.impact or "High"
+        })
+    return result
+
+@app.post("/api/threats/{incident_str_id}/contain")
+def contain_active_threat(
+    incident_str_id: str,
+    db: Session = Depends(get_db),
+    tenant: models.Tenant = Depends(get_current_tenant)
+):
+    try:
+        threat_id = int(incident_str_id.replace("T-", ""))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de incidente inválido")
+    
+    threat = db.query(models.Threat).filter(
+        models.Threat.id == threat_id,
+        models.Threat.tenant_id == tenant.id
+    ).first()
+    
+    if not threat:
+        raise HTTPException(status_code=404, detail="Amenaza no encontrada")
+    
+    threat.status = "CONTAINED"
+    threat.soar_action = "Manual Resolve"
+    
+    new_log = models.ActionLog(
+        tenant_id=tenant.id,
+        threat_id=threat.id,
+        action_taken="MANUAL_CONTAIN",
+        status="SUCCESS"
+    )
+    db.add(new_log)
+    db.commit()
+    
+    return {"message": f"Incidente {incident_str_id} contenido exitosamente"}
