@@ -18,6 +18,8 @@ export default function ThreatHistoryLog() {
   const [filterType, setFilterType] = useState<string>('ALL');
   const [filterRisk, setFilterRisk] = useState<string>('ALL');
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
+  const [aiReport, setAiReport] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchHistory = async () => {
@@ -56,6 +58,35 @@ export default function ThreatHistoryLog() {
     fetchHistory();
   }, []);
 
+  // Función para consultar la IA de Gemini desde el backend y generar reporte forense
+  const handleGenerateAiReport = async () => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+
+    setIsAiLoading(true);
+    setAiReport(null);
+    try {
+      const response = await fetch('http://localhost:8000/analytics/generate-report', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setAiReport(data.reporte);
+      } else {
+        setAiReport('Error al generar el análisis forense con IA.');
+      }
+    } catch (err) {
+      console.error('Error de red con la IA:', err);
+      setAiReport('No se pudo conectar con el motor de IA.');
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
   const filteredData = historyData.filter(item => {
     const matchesType = filterType === 'ALL' || item.type.includes(filterType);
     const matchesRisk = filterRisk === 'ALL' || item.riskLevel === filterRisk;
@@ -64,9 +95,10 @@ export default function ThreatHistoryLog() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Tabla de Historial */}
       <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
         <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-3">
-          <h3 className="text-white text-sm font-semibold tracking-wide uppercase">Threat History Log (Backend DB)</h3>
+          <h3 className="text-white text-sm font-semibold tracking-wide uppercase">Threat History Log & Forensics</h3>
           
           <div className="flex items-center space-x-2 text-xs">
             <select 
@@ -117,7 +149,7 @@ export default function ThreatHistoryLog() {
                 filteredData.map((item, index) => (
                   <tr 
                     key={index} 
-                    onClick={() => setSelectedIncident(item)}
+                    onClick={() => { setSelectedIncident(item); setAiReport(null); }}
                     className={`hover:bg-slate-800/40 transition-colors cursor-pointer ${selectedIncident?.incidentId === item.incidentId ? 'bg-slate-800/60' : ''}`}
                   >
                     <td className="py-3 px-3 font-medium text-white flex items-center space-x-2">
@@ -143,6 +175,7 @@ export default function ThreatHistoryLog() {
         </div>
       </div>
 
+      {/* Panel Lateral Forense e IA (Incident Details) */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg flex flex-col justify-between">
         {selectedIncident ? (
           <div>
@@ -151,15 +184,28 @@ export default function ThreatHistoryLog() {
                 Incident Details: {selectedIncident.incidentId}
               </h4>
               <span className="text-[10px] bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded border border-purple-500/20 font-mono">
-                Real DB Data
+                AI Powered
               </span>
             </div>
 
             <div className="mb-4">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Forensic Analysis</span>
-              <p className="text-xs text-slate-300 bg-slate-950 p-3 rounded border border-slate-800/80 leading-relaxed font-sans">
-                {selectedIncident.forensicAnalysis}
-              </p>
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Forensic & AI Remediation</span>
+                <button
+                  onClick={handleGenerateAiReport}
+                  disabled={isAiLoading}
+                  className="bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 text-[10px] px-2 py-0.5 rounded border border-purple-500/30 transition-colors font-mono disabled:opacity-50"
+                >
+                  {isAiLoading ? 'Analizando...' : 'Consultar IA'}
+                </button>
+              </div>
+              <div className="text-xs text-slate-300 bg-slate-950 p-3 rounded border border-slate-800/80 leading-relaxed font-sans max-h-40 overflow-y-auto">
+                {aiReport ? (
+                  <p className="whitespace-pre-wrap">{aiReport}</p>
+                ) : (
+                  <p className="text-slate-500 italic">Haz clic en "Consultar IA" para obtener recomendaciones de remediación y análisis forense profundo.</p>
+                )}
+              </div>
             </div>
 
             <div className="mb-4 space-y-2">
@@ -167,14 +213,16 @@ export default function ThreatHistoryLog() {
               <div className="bg-slate-950 p-2.5 rounded border border-slate-800/80 text-[11px] font-mono text-cyan-300 space-y-1">
                 <div>IP: {selectedIncident.sourceIp}</div>
                 <div>Vector: {selectedIncident.attackVector}</div>
+                <div>Impact: {selectedIncident.impact}</div>
               </div>
             </div>
 
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Remediation Status</span>
-              <div className="text-xs text-slate-300 bg-slate-950 p-3 rounded border border-slate-800/80 space-y-1">
-                <p>• Status: <span className="text-emerald-400 font-mono">{selectedIncident.status}</span></p>
-                <p>• Verified rule execution and log auditing completed.</p>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Attack Timeline</span>
+              <div className="text-xs text-slate-300 bg-slate-950 p-3 rounded border border-slate-800/80 space-y-1 font-mono">
+                <p className="text-slate-400">• [{selectedIncident.detected}] Event Detected</p>
+                <p className="text-cyan-400">• Enriched via Threat Intel & SOAR</p>
+                <p className="text-emerald-400">• Status: {selectedIncident.status}</p>
               </div>
             </div>
           </div>
@@ -186,7 +234,7 @@ export default function ThreatHistoryLog() {
 
         <div className="mt-4 pt-3 border-t border-slate-800 text-[10px] text-slate-400 flex justify-between items-center">
           <span>Audit Log Synchronized</span>
-          <span className="text-emerald-400 font-mono">Secure</span>
+          <span className="text-purple-400 font-mono">Gemini Active</span>
         </div>
       </div>
     </div>
