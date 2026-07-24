@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from security import get_password_hash, verify_password, create_access_token, SECRET_KEY, ALGORITHM
+import json
 # --- IMPORT NUEVO ---
 from services.analytics import AnalyticsService
 # --- IMPORT IA ---
@@ -288,3 +289,129 @@ def contain_active_threat(
     db.commit()
     
     return {"message": f"Incidente {incident_str_id} contenido exitosamente"}
+
+# --- ENDPOINT FORENSE / REPORTE DE IA PERSISTENTE Y PERSONALIZADO POR INCIDENTE (FASE 4.3) ---
+
+@app.get("/api/threats/{incident_str_id}/forensic-report")
+def get_or_generate_forensic_report(
+    incident_str_id: str,
+    db: Session = Depends(get_db),
+    tenant: models.Tenant = Depends(get_current_tenant)
+):
+    try:
+        threat_id = int(incident_str_id.replace("T-", ""))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="ID de incidente inválido")
+
+    # 1. Buscar la amenaza validando el tenant actual
+    threat = db.query(models.Threat).filter(
+        models.Threat.id == threat_id,
+        models.Threat.tenant_id == tenant.id
+    ).first()
+    
+    if not threat:
+        raise HTTPException(status_code=404, detail="Incidente no encontrado en el historial.")
+
+    # 2. CAMBIO CLAVE: Buscar un reporte forense asociado ESPECÍFICAMENTE a este threat_id (incidente único)
+    forensic_report = db.query(models.ForensicReport).filter(
+        models.ForensicReport.threat_id == threat.id,
+        models.ForensicReport.tenant_id == tenant.id
+    ).first() if hasattr(models.ForensicReport, 'threat_id') else None
+
+    if not forensic_report:
+        # 3. Si no existe para este incidente específico, llamamos a Gemini con los datos particulares de ESTE ataque
+        prompt_context = f"""
+        Actúa como un analista experto en Ciberseguridad y SOAR. Genera un reporte forense técnico, único y altamente personalizado para este incidente específico:
+        - ID de Incidente: T-{threat.id}
+        - Tipo de Amenaza: {threat.threat_type}
+        - Vector de Ataque: {threat.attack_vector or "Web Endpoint"}
+        - IP de Origen: {threat.source_ip}
+        - Nivel de Riesgo: {threat.risk_level}
+        - Impacto: {threat.impact}
+        - Acción SOAR ejecutada: {threat.soar_action}
+
+        Debes retornar estrictamente un objeto JSON válido con exactamente estas llaves y contenidos analíticos únicos para este evento:
+        {{
+            "danger_analysis": "Un párrafo técnico analizando específicamente por qué este ataque ({threat.threat_type}) desde la IP {threat.source_ip} con riesgo {threat.risk_level} es peligroso para este vector.",
+            "operational_risk": "Impacto operacional detallado para este incidente de {threat.threat_type}.",
+            "financial_risk": "Impacto financiero estimado por inactividad o brecha de {threat.threat_type}.",
+            "reputation_risk": "Impacto en la reputación corporativa por la IP {threat.source_ip}.",
+            "compliance_risk": "Afectación a marcos regulatorios y normativas de seguridad.",
+            "recommendations": [
+                "Recomendación técnica específica 1 orientada a la IP {threat.source_ip}",
+                "Recomendación técnica específica 2 para blindar el vector {threat.attack_vector}",
+                "Acción correctiva inmediata para el incidente T-{threat.id}"
+            ],
+            "soar_response": "Detalle técnico de la automatización SOAR aplicada mediante la acción {threat.soar_action} sobre el nodo de origen."
+        }}
+        """
+
+        try:
+            ai_response = model.generate_content(prompt_context)
+            raw_text = ai_response.text.strip()
+            
+            # Limpiar bloques de código markdown si la IA los incluye
+            if raw_text.startswith("```json"):
+                raw_text = raw_text[7:]
+            if raw_text.endswith("```"):
+                raw_text = raw_text[:-3]
+            
+            ai_data = json.loads(raw_text.strip())
+        except Exception as e:
+            # Fallback robusto en caso de error de parseo de la IA
+            ai_data = {
+                "danger_analysis": f"Análisis detallado de la brecha por {threat.threat_type} originada desde {threat.source_ip} con nivel {threat.risk_level}.",
+                "operational_risk": f"Degradación en la operatividad del servicio debido a {threat.impact}.",
+                "financial_risk": "Costes asociados a mitigación de incidentes y análisis de logs.",
+                "reputation_risk": "Exposición pública de vulnerabilidades de la aplicación.",
+                "compliance_risk": "Incumplimiento temporal de auditorías de seguridad.",
+                "recommendations": [
+                    f"Desplegar reglas de filtrado específicas contra patrones de {threat.threat_type}.",
+                    f"Bloquear permanentemente la dirección IP maliciosa {threat.source_ip}.",
+                    "Auditar los componentes afectados por el vector de red."
+                ],
+                "soar_response": f"Respuesta automatizada ejecutada: {threat.soar_action} sobre {threat.source_ip}."
+            }
+
+        identification_info = {
+            "type": threat.threat_type,
+            "vector": threat.attack_vector or "Web Endpoint",
+            "timestamp": threat.detected_at.strftime("%Y-%m-%d %H:%M:%S") if threat.detected_at else datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+        potential_risks_info = {
+            "operational": ai_data.get("operational_risk", ""),
+            "financial": ai_data.get("financial_risk", ""),
+            "reputation": ai_data.get("reputation_risk", ""),
+            "compliance": ai_data.get("compliance_risk", "")
+        }
+
+        # Guardar en la base de datos vinculado de manera única al threat_id de este incidente
+        forensic_report_kwargs = {
+            "tenant_id": tenant.id,
+            "threat_type": threat.threat_type,
+            "identification_data": json.dumps(identification_info),
+            "danger_analysis": ai_data.get("danger_analysis", ""),
+            "potential_risks": json.dumps(potential_risks_info),
+            "preventive_recommendations": json.dumps(ai_data.get("recommendations", [])),
+            "soar_automated_response": ai_data.get("soar_response", "")
+        }
+        
+        if hasattr(models.ForensicReport, 'threat_id'):
+            forensic_report_kwargs["threat_id"] = threat.id
+
+        forensic_report = models.ForensicReport(**forensic_report_kwargs)
+        db.add(forensic_report)
+        db.commit()
+        db.refresh(forensic_report)
+
+    # 4. Retornar el reporte estructurado y personalizado para este incidente
+    return {
+        "threat_id": threat.id,
+        "threat_type": threat.threat_type,
+        "identification": json.loads(forensic_report.identification_data),
+        "danger_analysis": forensic_report.danger_analysis,
+        "potential_risks": json.loads(forensic_report.potential_risks),
+        "preventive_recommendations": json.loads(forensic_report.preventive_recommendations),
+        "soar_automated_response": forensic_report.soar_automated_response
+    }

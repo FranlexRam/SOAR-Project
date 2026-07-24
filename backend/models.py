@@ -41,6 +41,7 @@ class Threat(Base):
     impact = Column(String)
     
     tenant = relationship("Tenant", back_populates="threats")
+    forensic_reports = relationship("ForensicReport", back_populates="threat", cascade="all, delete-orphan")
 
 class Rule(Base):
     __tablename__ = "rules"
@@ -70,3 +71,25 @@ class Blacklist(Base):
     tenant_id = Column(Integer, ForeignKey("tenants.id"), index=True)
     ip_address = Column(String, index=True)
     added_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+class ForensicReport(Base):
+    __tablename__ = "forensic_reports"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), index=True, nullable=True)
+    
+    # --- CAMBIO CLAVE ---
+    # Eliminamos `unique=True` de threat_type para que puedan existir múltiples reportes del mismo tipo.
+    # Añadimos `threat_id` con clave foránea y relación inversa con Threat.
+    threat_type = Column(String, index=True)
+    threat_id = Column(Integer, ForeignKey("threats.id"), index=True, nullable=True)
+    
+    identification_data = Column(String)
+    danger_analysis = Column(String)
+    potential_risks = Column(String)
+    preventive_recommendations = Column(String)
+    soar_automated_response = Column(String)
+    
+    created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+    
+    threat = relationship("Threat", back_populates="forensic_reports")

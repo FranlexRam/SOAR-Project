@@ -8,8 +8,26 @@ interface HistoryItem {
   riskLevel: string;
   status: string;
   impact: string;
-  forensicAnalysis?: string;
   attackVector?: string;
+}
+
+interface ForensicReportData {
+  threat_id: number;
+  threat_type: string;
+  identification: {
+    type: string;
+    vector: string;
+    timestamp: string;
+  };
+  danger_analysis: string;
+  potential_risks: {
+    operational: string;
+    financial: string;
+    reputation: string;
+    compliance: string;
+  };
+  preventive_recommendations: string[];
+  soar_automated_response: string;
 }
 
 export default function ThreatHistoryLog() {
@@ -18,8 +36,11 @@ export default function ThreatHistoryLog() {
   const [filterType, setFilterType] = useState<string>('ALL');
   const [filterRisk, setFilterRisk] = useState<string>('ALL');
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
-  const [aiReport, setAiReport] = useState<string | null>(null);
+  
+  // Estados para el reporte forense persistente y automático de 5 secciones
+  const [forensicReport, setForensicReport] = useState<ForensicReportData | null>(null);
+  const [isReportLoading, setIsReportLoading] = useState<boolean>(false);
+  const [reportError, setReportError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchHistory = async () => {
@@ -42,11 +63,13 @@ export default function ThreatHistoryLog() {
             riskLevel: t.risk_level,
             status: t.status,
             impact: t.impact || 'High',
-            forensicAnalysis: `Analysis for ${t.threat_type} from IP ${t.source_ip}. Action executed: ${t.soar_action || 'None'}.`,
             attackVector: t.attack_vector || 'Web Endpoint'
           }));
           setHistoryData(formatted);
-          if (formatted.length > 0) setSelectedIncident(formatted[0]);
+          if (formatted.length > 0) {
+            setSelectedIncident(formatted[0]);
+            fetchForensicReport(formatted[0].incidentId);
+          }
         }
       } catch (err) {
         console.error('Error al cargar el historial de amenazas:', err);
@@ -58,33 +81,38 @@ export default function ThreatHistoryLog() {
     fetchHistory();
   }, []);
 
-  // Función para consultar la IA de Gemini desde el backend y generar reporte forense
-  const handleGenerateAiReport = async () => {
+  // Función para cargar automáticamente el reporte forense persistente al seleccionar un incidente
+  const fetchForensicReport = async (incidentId: string) => {
     const token = localStorage.getItem('access_token');
     if (!token) return;
 
-    setIsAiLoading(true);
-    setAiReport(null);
+    setIsReportLoading(true);
+    setReportError(null);
     try {
-      const response = await fetch('http://localhost:8000/analytics/generate-report', {
-        method: 'POST',
+      const response = await fetch(`http://localhost:8000/api/threats/${incidentId}/forensic-report`, {
         headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${token}`
         }
       });
       if (response.ok) {
         const data = await response.json();
-        setAiReport(data.reporte);
+        setForensicReport(data);
       } else {
-        setAiReport('Error al generar el análisis forense con IA.');
+        setReportError('No se pudo cargar el reporte forense.');
+        setForensicReport(null);
       }
     } catch (err) {
-      console.error('Error de red con la IA:', err);
-      setAiReport('No se pudo conectar con el motor de IA.');
+      console.error('Error de red al consultar el reporte forense:', err);
+      setReportError('Error de conexión con el servidor.');
+      setForensicReport(null);
     } finally {
-      setIsAiLoading(false);
+      setIsReportLoading(false);
     }
+  };
+
+  const handleSelectIncident = (item: HistoryItem) => {
+    setSelectedIncident(item);
+    fetchForensicReport(item.incidentId);
   };
 
   const filteredData = historyData.filter(item => {
@@ -149,7 +177,7 @@ export default function ThreatHistoryLog() {
                 filteredData.map((item, index) => (
                   <tr 
                     key={index} 
-                    onClick={() => { setSelectedIncident(item); setAiReport(null); }}
+                    onClick={() => handleSelectIncident(item)}
                     className={`hover:bg-slate-800/40 transition-colors cursor-pointer ${selectedIncident?.incidentId === item.incidentId ? 'bg-slate-800/60' : ''}`}
                   >
                     <td className="py-3 px-3 font-medium text-white flex items-center space-x-2">
@@ -175,56 +203,88 @@ export default function ThreatHistoryLog() {
         </div>
       </div>
 
-      {/* Panel Lateral Forense e IA (Incident Details) */}
+      {/* Panel Lateral Forense Automático de 5 Secciones (Sin botón Consultar IA) */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg flex flex-col justify-between">
         {selectedIncident ? (
-          <div>
-            <div className="flex justify-between items-center mb-4 border-b border-slate-800 pb-3">
+          <div className="space-y-4 overflow-y-auto max-h-[700px] pr-1">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h4 className="text-white text-xs font-bold uppercase tracking-wider">
                 Incident Details: {selectedIncident.incidentId}
               </h4>
               <span className="text-[10px] bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded border border-purple-500/20 font-mono">
-                AI Powered
+                AI Forensic Active
               </span>
             </div>
 
-            <div className="mb-4">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Forensic & AI Remediation</span>
-                <button
-                  onClick={handleGenerateAiReport}
-                  disabled={isAiLoading}
-                  className="bg-purple-600/20 hover:bg-purple-600/40 text-purple-300 text-[10px] px-2 py-0.5 rounded border border-purple-500/30 transition-colors font-mono disabled:opacity-50"
-                >
-                  {isAiLoading ? 'Analizando...' : 'Consultar IA'}
-                </button>
+            {isReportLoading ? (
+              <div className="text-center py-10 text-slate-500 font-mono text-xs">
+                Cargando informe forense y análisis automatizado...
               </div>
-              <div className="text-xs text-slate-300 bg-slate-950 p-3 rounded border border-slate-800/80 leading-relaxed font-sans max-h-40 overflow-y-auto">
-                {aiReport ? (
-                  <p className="whitespace-pre-wrap">{aiReport}</p>
-                ) : (
-                  <p className="text-slate-500 italic">Haz clic en "Consultar IA" para obtener recomendaciones de remediación y análisis forense profundo.</p>
-                )}
+            ) : reportError ? (
+              <div className="text-center py-6 text-red-400 font-mono text-xs">
+                {reportError}
               </div>
-            </div>
+            ) : forensicReport ? (
+              <>
+                {/* 1. Identificación del ataque */}
+                <div className="bg-slate-950 p-3 rounded border border-slate-800/80">
+                  <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider block mb-1">
+                    1. Identificación del Ataque
+                  </span>
+                  <div className="text-[11px] font-mono text-slate-300 space-y-1">
+                    <div><strong className="text-slate-400">Tipo:</strong> {forensicReport.identification.type}</div>
+                    <div><strong className="text-slate-400">Vector:</strong> {forensicReport.identification.vector}</div>
+                    <div><strong className="text-slate-400">Timestamp:</strong> {forensicReport.identification.timestamp}</div>
+                    <div><strong className="text-slate-400">IP Origen:</strong> {selectedIncident.sourceIp}</div>
+                  </div>
+                </div>
 
-            <div className="mb-4 space-y-2">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Indicators of Compromise (IoCs)</span>
-              <div className="bg-slate-950 p-2.5 rounded border border-slate-800/80 text-[11px] font-mono text-cyan-300 space-y-1">
-                <div>IP: {selectedIncident.sourceIp}</div>
-                <div>Vector: {selectedIncident.attackVector}</div>
-                <div>Impact: {selectedIncident.impact}</div>
-              </div>
-            </div>
+                {/* 2. Análisis de peligrosidad */}
+                <div className="bg-slate-950 p-3 rounded border border-slate-800/80">
+                  <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block mb-1">
+                    2. Análisis de Peligrosidad
+                  </span>
+                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                    {forensicReport.danger_analysis}
+                  </p>
+                </div>
 
-            <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Attack Timeline</span>
-              <div className="text-xs text-slate-300 bg-slate-950 p-3 rounded border border-slate-800/80 space-y-1 font-mono">
-                <p className="text-slate-400">• [{selectedIncident.detected}] Event Detected</p>
-                <p className="text-cyan-400">• Enriched via Threat Intel & SOAR</p>
-                <p className="text-emerald-400">• Status: {selectedIncident.status}</p>
-              </div>
-            </div>
+                {/* 3. Riesgos potenciales (operacional, financiero, reputación, cumplimiento) */}
+                <div className="bg-slate-950 p-3 rounded border border-slate-800/80">
+                  <span className="text-[10px] font-bold text-red-400 uppercase tracking-wider block mb-2">
+                    3. Riesgos Potenciales
+                  </span>
+                  <div className="text-[11px] text-slate-300 space-y-1.5 font-sans">
+                    <div><strong className="text-slate-400">Operacional:</strong> {forensicReport.potential_risks.operational}</div>
+                    <div><strong className="text-slate-400">Financiero:</strong> {forensicReport.potential_risks.financial}</div>
+                    <div><strong className="text-slate-400">Reputación:</strong> {forensicReport.potential_risks.reputation}</div>
+                    <div><strong className="text-slate-400">Cumplimiento:</strong> {forensicReport.potential_risks.compliance}</div>
+                  </div>
+                </div>
+
+                {/* 4. Recomendaciones preventivas */}
+                <div className="bg-slate-950 p-3 rounded border border-slate-800/80">
+                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block mb-2">
+                    4. Recomendaciones Preventivas
+                  </span>
+                  <ul className="text-[11px] text-slate-300 space-y-1 list-disc pl-4 font-sans">
+                    {forensicReport.preventive_recommendations.map((rec, idx) => (
+                      <li key={idx}>{rec}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* 5. Respuesta automatizada del SOAR */}
+                <div className="bg-slate-950 p-3 rounded border border-slate-800/80">
+                  <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider block mb-1">
+                    5. Respuesta Automatizada SOAR
+                  </span>
+                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                    {forensicReport.soar_automated_response}
+                  </p>
+                </div>
+              </>
+            ) : null}
           </div>
         ) : (
           <div className="flex items-center justify-center h-full text-slate-500 text-xs font-mono">
@@ -234,7 +294,7 @@ export default function ThreatHistoryLog() {
 
         <div className="mt-4 pt-3 border-t border-slate-800 text-[10px] text-slate-400 flex justify-between items-center">
           <span>Audit Log Synchronized</span>
-          <span className="text-purple-400 font-mono">Gemini Active</span>
+          <span className="text-purple-400 font-mono">Persistent AI Active</span>
         </div>
       </div>
     </div>
