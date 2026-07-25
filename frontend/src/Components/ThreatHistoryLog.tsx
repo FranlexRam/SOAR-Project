@@ -30,56 +30,48 @@ interface ForensicReportData {
   soar_automated_response: string;
 }
 
-export default function ThreatHistoryLog() {
+interface ThreatHistoryLogProps {
+  threats: any[]; // Recibe los datos centralizados en tiempo real desde App.tsx
+}
+
+export default function ThreatHistoryLog({ threats }: ThreatHistoryLogProps) {
   const [historyData, setHistoryData] = useState<HistoryItem[]>([]);
   const [selectedIncident, setSelectedIncident] = useState<HistoryItem | null>(null);
   const [filterType, setFilterType] = useState<string>('ALL');
   const [filterRisk, setFilterRisk] = useState<string>('ALL');
-  const [isLoading, setIsLoading] = useState<boolean>(true);
   
   // Estados para el reporte forense persistente y automático de 5 secciones
   const [forensicReport, setForensicReport] = useState<ForensicReportData | null>(null);
   const [isReportLoading, setIsReportLoading] = useState<boolean>(false);
   const [reportError, setReportError] = useState<string | null>(null);
 
+  // Sincronizar y formatear los datos cada vez que 'threats' se actualice en tiempo real
   useEffect(() => {
-    const fetchHistory = async () => {
-      const token = localStorage.getItem('access_token');
-      if (!token) return;
+    const formatted: HistoryItem[] = threats.map((t: any) => ({
+      incidentId: `T-${t.id}`,
+      type: t.threat_type,
+      detected: t.detected_at,
+      sourceIp: t.source_ip,
+      riskLevel: t.risk_level,
+      status: t.status,
+      impact: t.impact || 'High',
+      attackVector: t.attack_vector || 'Web Endpoint'
+    }));
 
-      try {
-        const response = await fetch('http://localhost:8000/threats', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        if (response.ok) {
-          const data = await response.json();
-          const formatted = data.map((t: any) => ({
-            incidentId: `T-${t.id}`,
-            type: t.threat_type,
-            detected: t.detected_at,
-            sourceIp: t.source_ip,
-            riskLevel: t.risk_level,
-            status: t.status,
-            impact: t.impact || 'High',
-            attackVector: t.attack_vector || 'Web Endpoint'
-          }));
-          setHistoryData(formatted);
-          if (formatted.length > 0) {
-            setSelectedIncident(formatted[0]);
-            fetchForensicReport(formatted[0].incidentId);
-          }
-        }
-      } catch (err) {
-        console.error('Error al cargar el historial de amenazas:', err);
-      } finally {
-        setIsLoading(false);
+    setHistoryData(formatted);
+
+    // Si hay un incidente seleccionado previamente, mantenerlo o seleccionar el primero por defecto
+    if (formatted.length > 0) {
+      const currentSelectedExists = formatted.find(item => item.incidentId === selectedIncident?.incidentId);
+      if (!currentSelectedExists) {
+        setSelectedIncident(formatted[0]);
+        fetchForensicReport(formatted[0].incidentId);
       }
-    };
-
-    fetchHistory();
-  }, []);
+    } else {
+      setSelectedIncident(null);
+      setForensicReport(null);
+    }
+  }, [threats]);
 
   // Función para cargar automáticamente el reporte forense persistente al seleccionar un incidente
   const fetchForensicReport = async (incidentId: string) => {
@@ -152,9 +144,9 @@ export default function ThreatHistoryLog() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
           <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-950 text-slate-400 uppercase font-mono tracking-wider border-b border-slate-800">
+            <thead className="bg-slate-950 text-slate-400 uppercase font-mono tracking-wider border-b border-slate-800 sticky top-0">
               <tr>
                 <th className="py-3 px-3">Type</th>
                 <th className="py-3 px-3">Detected</th>
@@ -165,11 +157,7 @@ export default function ThreatHistoryLog() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
-              {isLoading ? (
-                <tr>
-                  <td colSpan={6} className="text-center py-6 text-slate-500 font-mono">Cargando historial...</td>
-                </tr>
-              ) : filteredData.length === 0 ? (
+              {filteredData.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="text-center py-6 text-slate-500 font-mono">No hay registros que coincidan con el filtro.</td>
                 </tr>
@@ -203,10 +191,10 @@ export default function ThreatHistoryLog() {
         </div>
       </div>
 
-      {/* Panel Lateral Forense Automático de 5 Secciones (Sin botón Consultar IA) */}
+      {/* Panel Lateral Forense Automático de 5 Secciones */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg flex flex-col justify-between">
         {selectedIncident ? (
-          <div className="space-y-4 overflow-y-auto max-h-[700px] pr-1">
+          <div className="space-y-4 overflow-y-auto max-h-[420px] pr-1">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
               <h4 className="text-white text-xs font-bold uppercase tracking-wider">
                 Incident Details: {selectedIncident.incidentId}
@@ -249,7 +237,7 @@ export default function ThreatHistoryLog() {
                   </p>
                 </div>
 
-                {/* 3. Riesgos potenciales (operacional, financiero, reputación, cumplimiento) */}
+                {/* 3. Riesgos potenciales */}
                 <div className="bg-slate-950 p-3 rounded border border-slate-800/80">
                   <span className="text-[10px] font-bold text-red-400 uppercase tracking-wider block mb-2">
                     3. Riesgos Potenciales

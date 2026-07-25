@@ -4,21 +4,41 @@ import Login from './Login';
 // --- IMPORTACIONES DE NUESTROS COMPONENTES DE LA FASE 4 ---
 import ActiveThreatsMonitor from './Components/ActiveThreatsMonitor';
 import ThreatHistoryLog from './Components/ThreatHistoryLog';
+import ThreatDonutChart from './Components/ThreatDonutChart';
 
 const api = axios.create({ baseURL: 'http://127.0.0.1:8000' });
 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [stats, setStats] = useState({ total: 0, critical: 0, active_response: "" });
+  const [threats, setThreats] = useState<any[]>([]); // Estado centralizado para las amenazas
 
-  useEffect(() => {
+  // Función para sincronizar estadísticas y amenazas en tiempo real
+  const fetchDashboardData = async () => {
     const token = localStorage.getItem('access_token');
     if (!token) return;
 
     const config = { headers: { 'Authorization': `Bearer ${token}` } };
 
-    api.get('/stats', config)
-      .then(r => setStats(r.data))
-      .catch(e => console.error("Error cargando estadísticas:", e));
+    try {
+      // 1. Actualizar tarjetas de estadísticas superiores
+      const statsRes = await api.get('/stats', config);
+      setStats(statsRes.data);
+
+      // 2. Actualizar lista de amenazas para el gráfico de dona y componentes
+      const threatsRes = await api.get('/threats', config);
+      setThreats(threatsRes.data);
+    } catch (e) {
+      console.error("Error sincronizando datos del dashboard:", e);
+    }
+  };
+
+  useEffect(() => {
+    // Carga inicial inmediata
+    fetchDashboardData();
+
+    // Configurar sondeo (polling) cada 3 segundos para actualización en tiempo real global
+    const interval = setInterval(fetchDashboardData, 3000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -30,7 +50,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         </button>
       </div>
       
-      {/* Grid de Stats */}
+      {/* Grid de Stats (Actualizado en tiempo real) */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-gray-900 p-4 rounded-lg border border-gray-800">
           <h2 className="text-gray-400 text-sm">Total Amenazas</h2>
@@ -46,9 +66,18 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         </div>
       </div>
 
-      {/* --- AQUÍ RENDERIZAMOS NUESTROS COMPONENTES DE LA FASE 4.2 --- */}
+      {/* --- RENDERIZADO DE COMPONENTES DE LA FASE 4 --- */}
       <ActiveThreatsMonitor />
-      <ThreatHistoryLog />
+      
+      {/* Grid para el Gráfico Donut (Recibe las amenazas centralizadas y ordenadas) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div className="lg:col-span-3">
+          <ThreatDonutChart threats={threats} />
+        </div>
+      </div>
+
+      {/* Historial Forense actualizado en tiempo real */}
+      <ThreatHistoryLog threats={threats} />
 
     </div>
   );
