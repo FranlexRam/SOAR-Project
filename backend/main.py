@@ -23,7 +23,6 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 ENV_PATH = BASE_DIR / ".env"
 load_dotenv(dotenv_path=ENV_PATH)
 
-# Ya no definimos Blacklist aquí, se importa a través de 'models'
 models.Base.metadata.create_all(bind=engine)
 
 # --- CONFIGURACIÓN IA SEGURA ---
@@ -40,7 +39,7 @@ except Exception as e:
 print("--------------------------------------------------")
 
 # Inicializamos con el modelo verificado
-model = genai.GenerativeModel('gemini-3.5-flash')
+model = genai.GenerativeModel('gemini-2.5-flash')
 
 # --- SCHEMAS ---
 class UserCreate(BaseModel):
@@ -65,7 +64,11 @@ class ThreatReport(BaseModel):
     attack_vector: str
     impact: str
 
-app = FastAPI()
+app = FastAPI(
+    title="SOAR Enterprise Security API",
+    description="API oficial del sistema SOAR para la monitorización en tiempo real, análisis forense con IA y automatización de respuesta a incidentes de ciberseguridad.",
+    version="1.0.0"
+)
 
 security = HTTPBearer()
 
@@ -111,7 +114,7 @@ def get_current_tenant(credentials: HTTPAuthorizationCredentials = Security(secu
     return tenant
 
 # --- AUTH & STATS ENDPOINTS ---
-@app.post("/register")
+@app.post("/register", status_code=201, tags=["Autenticación"], summary="Registrar nuevo usuario y tenant")
 def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     new_tenant = models.Tenant(name=user_data.tenant_name, unique_token=f"TOKEN-{user_data.email}")
     db.add(new_tenant)
@@ -123,7 +126,7 @@ def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "Usuario y Tenant creados exitosamente"}
 
-@app.post("/login")
+@app.post("/login", status_code=200, tags=["Autenticación"], summary="Iniciar sesión y obtener token JWT")
 def login(user_data: UserLogin, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.email == user_data.email).first()
     if not user or not verify_password(user_data.password, user.hashed_password):
@@ -132,18 +135,18 @@ def login(user_data: UserLogin, db: Session = Depends(get_db)):
     access_token = create_access_token(data={"sub": user.email, "tenant_token": tenant.unique_token})
     return {"access_token": access_token, "token_type": "bearer"}
 
-@app.get("/stats")
+@app.get("/stats", status_code=200, tags=["Estadísticas y Monitoreo"], summary="Obtener métricas generales del dashboard")
 def get_stats(db: Session = Depends(get_db), tenant: models.Tenant = Depends(get_current_tenant)):
     total = db.query(models.Threat).filter(models.Threat.tenant_id == tenant.id).count()
     critical = db.query(models.Threat).filter(models.Threat.tenant_id == tenant.id, models.Threat.risk_level == "CRITICAL").count()
     return {"total": total, "critical": critical, "active_response": "Automated"}        
 
-@app.get("/threats")
+@app.get("/threats", status_code=200, tags=["Estadísticas y Monitoreo"], summary="Listar todas las amenazas registradas del tenant")
 def get_threats(db: Session = Depends(get_db), tenant: models.Tenant = Depends(get_current_tenant)):
     return db.query(models.Threat).filter(models.Threat.tenant_id == tenant.id).all()
 
 # --- ENDPOINTS FASE 3 (Analytics & IA) ---
-@app.get("/analytics/summary")
+@app.get("/analytics/summary", status_code=200, tags=["Analítica e Inteligencia Artificial"], summary="Obtener resumen analítico y tendencias de amenazas")
 def get_analytics_summary(
     db: Session = Depends(get_db), 
     tenant: models.Tenant = Depends(get_current_tenant)
@@ -155,7 +158,7 @@ def get_analytics_summary(
         "success_rate": success_rate
     }
 
-@app.post("/analytics/generate-report")
+@app.post("/analytics/generate-report", status_code=200, tags=["Analítica e Inteligencia Artificial"], summary="Generar reporte analítico general potenciado por IA")
 def generate_report(
     db: Session = Depends(get_db),
     tenant: models.Tenant = Depends(get_current_tenant)
@@ -165,14 +168,14 @@ def generate_report(
     return {"reporte": response.text}
 
 # --- ENDPOINTS FASE 2 & INTEL ---
-@app.post("/rules", status_code=201)
+@app.post("/rules", status_code=201, tags=["Motor de Reglas y Automatización"], summary="Crear nueva regla de mitigación SOAR")
 def create_rule(rule: RuleCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     db_rule = models.Rule(tenant_id=current_user.tenant_id, threat_type=rule.threat_type, action=rule.action, is_active=rule.is_active)
     db.add(db_rule)
     db.commit()
     return db_rule
 
-@app.post("/threats/report", status_code=201)
+@app.post("/threats/report", status_code=201, tags=["Motor de Reglas y Automatización"], summary="Reportar y procesar una nueva amenaza de seguridad")
 async def report_threat(report: ThreatReport, db: Session = Depends(get_db), tenant: models.Tenant = Depends(get_current_tenant)):
     is_blacklisted = db.query(models.Blacklist).filter(
         models.Blacklist.ip_address == report.source_ip,
@@ -232,7 +235,7 @@ async def report_threat(report: ThreatReport, db: Session = Depends(get_db), ten
 
 # --- ENDPOINTS ADICIONALES PARA EL MONITOR EN TIEMPO REAL (FASE 4.2) ---
 
-@app.get("/api/threats/active")
+@app.get("/api/threats/active", status_code=200, tags=["Monitoreo en Tiempo Real"], summary="Obtener lista de amenazas activas o no resueltas")
 def get_active_threats(
     db: Session = Depends(get_db), 
     tenant: models.Tenant = Depends(get_current_tenant)
@@ -257,7 +260,7 @@ def get_active_threats(
         })
     return result
 
-@app.post("/api/threats/{incident_str_id}/contain")
+@app.post("/api/threats/{incident_str_id}/contain", status_code=200, tags=["Monitoreo en Tiempo Real"], summary="Ejecutar contención manual de una amenaza activa")
 def contain_active_threat(
     incident_str_id: str,
     db: Session = Depends(get_db),
@@ -292,7 +295,7 @@ def contain_active_threat(
 
 # --- ENDPOINT FORENSE / REPORTE DE IA PERSISTENTE Y PERSONALIZADO POR INCIDENTE (FASE 4.3) ---
 
-@app.get("/api/threats/{incident_str_id}/forensic-report")
+@app.get("/api/threats/{incident_str_id}/forensic-report", status_code=200, tags=["Análisis Forense con IA"], summary="Obtener o generar reporte forense estructurado por incidente")
 def get_or_generate_forensic_report(
     incident_str_id: str,
     db: Session = Depends(get_db),
@@ -303,7 +306,6 @@ def get_or_generate_forensic_report(
     except ValueError:
         raise HTTPException(status_code=400, detail="ID de incidente inválido")
 
-    # 1. Buscar la amenaza validando el tenant actual
     threat = db.query(models.Threat).filter(
         models.Threat.id == threat_id,
         models.Threat.tenant_id == tenant.id
@@ -312,14 +314,12 @@ def get_or_generate_forensic_report(
     if not threat:
         raise HTTPException(status_code=404, detail="Incidente no encontrado en el historial.")
 
-    # 2. CAMBIO CLAVE: Buscar un reporte forense asociado ESPECÍFICAMENTE a este threat_id (incidente único)
     forensic_report = db.query(models.ForensicReport).filter(
         models.ForensicReport.threat_id == threat.id,
         models.ForensicReport.tenant_id == tenant.id
     ).first() if hasattr(models.ForensicReport, 'threat_id') else None
 
     if not forensic_report:
-        # 3. Si no existe para este incidente específico, llamamos a Gemini con los datos particulares de ESTE ataque
         prompt_context = f"""
         Actúa como un analista experto en Ciberseguridad y SOAR. Genera un reporte forense técnico, único y altamente personalizado para este incidente específico:
         - ID de Incidente: T-{threat.id}
@@ -350,7 +350,6 @@ def get_or_generate_forensic_report(
             ai_response = model.generate_content(prompt_context)
             raw_text = ai_response.text.strip()
             
-            # Limpiar bloques de código markdown si la IA los incluye
             if raw_text.startswith("```json"):
                 raw_text = raw_text[7:]
             if raw_text.endswith("```"):
@@ -358,7 +357,6 @@ def get_or_generate_forensic_report(
             
             ai_data = json.loads(raw_text.strip())
         except Exception as e:
-            # Fallback robusto en caso de error de parseo de la IA
             ai_data = {
                 "danger_analysis": f"Análisis detallado de la brecha por {threat.threat_type} originada desde {threat.source_ip} con nivel {threat.risk_level}.",
                 "operational_risk": f"Degradación en la operatividad del servicio debido a {threat.impact}.",
@@ -386,7 +384,6 @@ def get_or_generate_forensic_report(
             "compliance": ai_data.get("compliance_risk", "")
         }
 
-        # Guardar en la base de datos vinculado de manera única al threat_id de este incidente
         forensic_report_kwargs = {
             "tenant_id": tenant.id,
             "threat_type": threat.threat_type,
@@ -405,7 +402,6 @@ def get_or_generate_forensic_report(
         db.commit()
         db.refresh(forensic_report)
 
-    # 4. Retornar el reporte estructurado y personalizado para este incidente
     return {
         "threat_id": threat.id,
         "threat_type": threat.threat_type,
