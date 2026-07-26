@@ -47,14 +47,43 @@ class UserCreate(BaseModel):
     password: str
     tenant_name: str
 
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "email": "admin@enterprise.com",
+                "password": "SecurePassword123!",
+                "tenant_name": "Enterprise Security Corp"
+            }
+        }
+    }
+
 class UserLogin(BaseModel):
     email: str
     password: str
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "email": "admin@enterprise.com",
+                "password": "SecurePassword123!"
+            }
+        }
+    }
 
 class RuleCreate(BaseModel):
     threat_type: str
     action: str
     is_active: bool = True
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "threat_type": "SQL Injection",
+                "action": "BLOCK",
+                "is_active": True
+            }
+        }
+    }
 
 class ThreatReport(BaseModel):
     threat_type: str
@@ -63,6 +92,19 @@ class ThreatReport(BaseModel):
     risk_level: str
     attack_vector: str
     impact: str
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "threat_type": "SQL Injection",
+                "source_ip": "192.168.1.100",
+                "country_code": "US",
+                "risk_level": "CRITICAL",
+                "attack_vector": "Web Endpoint",
+                "impact": "High"
+            }
+        }
+    }
 
 app = FastAPI(
     title="SOAR Enterprise Security API",
