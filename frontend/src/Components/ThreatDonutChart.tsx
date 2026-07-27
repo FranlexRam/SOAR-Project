@@ -86,8 +86,8 @@ export default function ThreatDonutChart({ threats }: ThreatDonutProps) {
             </ResponsiveContainer>
           </div>
 
-          {/* Leyenda Detallada Ordenada de Mayor a Menor */}
-          <div className="flex flex-col space-y-2 pl-2 max-h-64 overflow-y-auto pr-2">
+          {/* Leyenda Detallada Ordenada de Mayor a Menor con Scrollbar Estilizado Pro */}
+          <div className="flex flex-col space-y-2 pl-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
             {data.map((item, index) => (
               <div key={index} className="flex items-center justify-between text-xs bg-slate-950/40 p-2 rounded-lg border border-slate-800/60">
                 <div className="flex items-center space-x-2.5">

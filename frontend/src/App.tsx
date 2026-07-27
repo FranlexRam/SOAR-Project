@@ -66,8 +66,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         </div>
       </div>
 
-      {/* --- RENDERIZADO DE COMPONENTES DE LA FASE 4 --- */}
-      <ActiveThreatsMonitor />
+      {/* --- RENDERIZADO DE COMPONENTES DE LA FASE 4 (Gráfico de Dona Arriba) --- */}
       
       {/* Grid para el Gráfico Donut (Recibe las amenazas centralizadas y ordenadas) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
@@ -75,6 +74,9 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           <ThreatDonutChart threats={threats} />
         </div>
       </div>
+
+      {/* Monitor de Amenazas Activas (Backend Connected) debajo del gráfico */}
+      <ActiveThreatsMonitor />
 
       {/* Historial Forense actualizado en tiempo real */}
       <ThreatHistoryLog threats={threats} />

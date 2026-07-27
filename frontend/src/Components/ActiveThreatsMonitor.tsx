@@ -83,9 +83,10 @@ export default function ActiveThreatsMonitor() {
         </div>
       )}
 
-      <div className="overflow-x-auto">
+      {/* Contenedor actualizado con scroll estilizado moderno y altura máxima controlada */}
+      <div className="overflow-x-auto max-h-[420px] overflow-y-auto pr-2 custom-scrollbar">
         <table className="w-full text-left text-xs text-slate-300">
-          <thead className="bg-slate-950 text-slate-400 uppercase font-mono tracking-wider border-b border-slate-800">
+          <thead className="bg-slate-950 text-slate-400 uppercase font-mono tracking-wider border-b border-slate-800 sticky top-0 z-10">
             <tr>
               <th className="py-3 px-3">Type</th>
               <th className="py-3 px-3">Detected</th>

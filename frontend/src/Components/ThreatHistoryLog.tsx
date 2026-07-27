@@ -144,9 +144,10 @@ export default function ThreatHistoryLog({ threats }: ThreatHistoryLogProps) {
           </div>
         </div>
 
-        <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+        {/* Contenedor con scrollbar estilizado moderno y cabecera sticky */}
+        <div className="overflow-x-auto max-h-[420px] overflow-y-auto pr-2 custom-scrollbar">
           <table className="w-full text-left text-xs text-slate-300">
-            <thead className="bg-slate-950 text-slate-400 uppercase font-mono tracking-wider border-b border-slate-800 sticky top-0">
+            <thead className="bg-slate-950 text-slate-400 uppercase font-mono tracking-wider border-b border-slate-800 sticky top-0 z-10">
               <tr>
                 <th className="py-3 px-3">Type</th>
                 <th className="py-3 px-3">Detected</th>
@@ -194,8 +195,9 @@ export default function ThreatHistoryLog({ threats }: ThreatHistoryLogProps) {
       {/* Panel Lateral Forense Automático de 5 Secciones */}
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg flex flex-col justify-between">
         {selectedIncident ? (
-          <div className="space-y-4 overflow-y-auto max-h-[420px] pr-1">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+          /* Contenedor del reporte con scrollbar personalizado */
+          <div className="space-y-4 overflow-y-auto max-h-[420px] pr-2 custom-scrollbar">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3 sticky top-0 bg-slate-900 z-10">
               <h4 className="text-white text-xs font-bold uppercase tracking-wider">
                 Incident Details: {selectedIncident.incidentId}
               </h4>
