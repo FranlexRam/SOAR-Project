@@ -226,12 +226,13 @@ async def report_threat(report: ThreatReport, db: Session = Depends(get_db), ten
     
     final_risk = report.risk_level
     reputation_score = 0
+    ip_country = report.country_code or "US"
     
     if is_blacklisted:
         final_risk = "CRITICAL"
         reputation_score = 100 
     else:
-        reputation_score = await threat_intel.check_ip_reputation(report.source_ip)
+        reputation_score, ip_country = await threat_intel.check_ip_reputation(report.source_ip)
         if reputation_score > 75:
             final_risk = "CRITICAL"
         
@@ -248,7 +249,7 @@ async def report_threat(report: ThreatReport, db: Session = Depends(get_db), ten
         threat_type=report.threat_type,
         detected_at=datetime.utcnow(),
         source_ip=report.source_ip,
-        country_code=report.country_code,
+        country_code=ip_country,
         soar_action=action,
         risk_level=final_risk,
         status="DETECTED",
@@ -293,6 +294,7 @@ def get_active_threats(
             "type": t.threat_type,
             "detected": t.detected_at.strftime("%Y-%m-%d %H:%M:%S") if t.detected_at else "",
             "sourceIp": t.source_ip,
+            "countryCode": t.country_code or "US",
             "soarAction": t.soar_action or "Pending Action",
             "riskLevel": t.risk_level,
             "status": "Contained" if t.status == "CONTAINED" else "In Analysis",

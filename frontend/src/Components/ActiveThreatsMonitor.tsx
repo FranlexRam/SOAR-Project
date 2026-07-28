@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { getFlagEmoji } from '../utils/geoHelper';
 
 interface ThreatItem {
   type: string;
   detected: string;
   sourceIp: string;
+  countryCode: string;
   soarAction: string;
   riskLevel: 'HIGH' | 'CRITICAL' | 'MEDIUM' | 'LOW';
   status: 'Contained' | 'In Analysis' | 'Resolved';
@@ -113,7 +115,12 @@ export default function ActiveThreatsMonitor() {
                 <tr key={index} className="hover:bg-slate-800/40 transition-colors">
                   <td className="py-3 px-3 font-medium text-white">{threat.type}</td>
                   <td className="py-3 px-3 font-mono text-slate-400">{threat.detected}</td>
-                  <td className="py-3 px-3 font-mono text-cyan-400">{threat.sourceIp}</td>
+                  <td className="py-3 px-3 font-mono text-cyan-400 flex items-center space-x-2">
+                    <span className="text-base" title={threat.countryCode}>
+                      {getFlagEmoji(threat.countryCode)}
+                    </span>
+                    <span>{threat.sourceIp}</span>
+                  </td>
                   <td className="py-3 px-3 text-slate-300">{threat.soarAction}</td>
                   <td className="py-3 px-3">
                     <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
