@@ -21,3 +21,49 @@
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background: rgba(75, 85, 99, 1); /* Se ilumina ligeramente al pasar el mouse */
 }
+
+/* ==========================================
+   Fase C: Efectos Visuales de Alta Gama (SOC Glow)
+   ========================================== */
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.4), inset 0 0 10px rgba(239, 68, 68, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(239, 68, 68, 0.8), inset 0 0 15px rgba(239, 68, 68, 0.4);
+  }
+}
+
+.glow-critical {
+  animation: pulseGlow 2s infinite ease-in-out;
+  border-color: rgba(239, 68, 68, 0.6) !important;
+}
+
+.glow-selected {
+  box-shadow: 0 0 15px rgba(6, 182, 212, 0.4);
+  border-color: rgba(6, 182, 212, 0.6) !important;
+}
+
+.glow-amber {
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+}
+
+@keyframes livePulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+.animate-live-pulse {
+  animation: livePulse 2s infinite;
+}

@@ -18,6 +18,9 @@ export default function ActiveThreatsMonitor() {
   const [threats, setThreats] = useState<ThreatItem[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Estado para rastrear el incidente seleccionado interactivamente por el usuario (Fase C)
+  const [selectedIncidentId, setSelectedIncidentId] = useState<string | null>(null);
 
   const fetchActiveThreats = async () => {
     const token = localStorage.getItem('access_token');
@@ -48,7 +51,8 @@ export default function ActiveThreatsMonitor() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleResolveThreat = async (incidentId: string) => {
+  const handleResolveThreat = async (incidentId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Evita que al hacer clic en Contain se seleccione la fila
     const token = localStorage.getItem('access_token');
     try {
       const response = await fetch(`http://localhost:8000/api/threats/${incidentId}/contain`, {
@@ -72,9 +76,11 @@ export default function ActiveThreatsMonitor() {
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center space-x-3">
           <h3 className="text-white text-sm font-semibold tracking-wide uppercase">Active Threats Monitor (Backend Connected)</h3>
-          <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-mono">
-            ● LIVE API SYNC
-          </span>
+          {/* Indicador animado de pulso en tiempo real */}
+          <div className="flex items-center space-x-1.5 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded font-mono text-[10px] text-emerald-400">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-live-pulse"></span>
+            <span>LIVE API SYNC</span>
+          </div>
         </div>
         <span className="text-xs text-slate-400 font-mono">Total Active: {threats.length}</span>
       </div>
@@ -85,9 +91,8 @@ export default function ActiveThreatsMonitor() {
         </div>
       )}
 
-      {/* Contenedor actualizado con scroll estilizado moderno y altura máxima controlada */}
       <div className="overflow-x-auto max-h-[420px] overflow-y-auto pr-2 custom-scrollbar">
-        <table className="w-full text-left text-xs text-slate-300">
+        <table className="w-full text-left text-xs text-slate-300 border-separate border-spacing-y-1">
           <thead className="bg-slate-950 text-slate-400 uppercase font-mono tracking-wider border-b border-slate-800 sticky top-0 z-10">
             <tr>
               <th className="py-3 px-3">Type</th>
@@ -101,7 +106,7 @@ export default function ActiveThreatsMonitor() {
               <th className="py-3 px-3 text-center">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/60">
+          <tbody className="divide-y divide-slate-800/20">
             {isLoading ? (
               <tr>
                 <td colSpan={9} className="text-center py-6 text-slate-500 font-mono">Cargando amenazas...</td>
@@ -111,48 +116,62 @@ export default function ActiveThreatsMonitor() {
                 <td colSpan={9} className="text-center py-6 text-slate-500 font-mono">No hay amenazas activas registradas.</td>
               </tr>
             ) : (
-              threats.map((threat, index) => (
-                <tr key={index} className="hover:bg-slate-800/40 transition-colors">
-                  <td className="py-3 px-3 font-medium text-white">{threat.type}</td>
-                  <td className="py-3 px-3 font-mono text-slate-400">{threat.detected}</td>
-                  <td className="py-3 px-3 font-mono text-cyan-400 flex items-center space-x-2">
-                    <span className="text-base" title={threat.countryCode}>
-                      {getFlagEmoji(threat.countryCode)}
-                    </span>
-                    <span>{threat.sourceIp}</span>
-                  </td>
-                  <td className="py-3 px-3 text-slate-300">{threat.soarAction}</td>
-                  <td className="py-3 px-3">
-                    <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
-                      threat.riskLevel === 'CRITICAL' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                    }`}>
-                      {threat.riskLevel}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3">
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
-                      threat.status === 'Contained' ? 'bg-emerald-500/20 text-emerald-400' :
-                      threat.status === 'In Analysis' ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-700 text-slate-300'
-                    }`}>
-                      {threat.status}
-                    </span>
-                  </td>
-                  <td className="py-3 px-3 font-mono text-slate-400">{threat.incidentId}</td>
-                  <td className="py-3 px-3 text-slate-300">{threat.attackVector}</td>
-                  <td className="py-3 px-3 text-center">
-                    {threat.status !== 'Contained' ? (
-                      <button 
-                        onClick={() => handleResolveThreat(threat.incidentId)}
-                        className="bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 text-[10px] px-2 py-1 rounded border border-emerald-500/30 transition-colors"
-                      >
-                        Contain
-                      </button>
-                    ) : (
-                      <span className="text-slate-500 text-[10px]">Secure</span>
-                    )}
-                  </td>
-                </tr>
-              ))
+              threats.map((threat, index) => {
+                const isSelected = selectedIncidentId === threat.incidentId;
+                
+                // Aplicación de brillo y selección exclusivamente al elemento que el usuario hace clic
+                let rowStyle = "hover:bg-slate-800/40 border-slate-800/60";
+                if (isSelected) {
+                  rowStyle = threat.riskLevel === 'CRITICAL' ? 'glow-critical bg-red-950/40 border-red-500/80' : 'glow-selected bg-cyan-950/30 border-cyan-500/80';
+                }
+
+                return (
+                  <tr 
+                    key={index} 
+                    onClick={() => setSelectedIncidentId(threat.incidentId)}
+                    className={`transition-all duration-200 border rounded-lg cursor-pointer ${rowStyle}`}
+                  >
+                    <td className="py-3 px-3 font-medium text-white">{threat.type}</td>
+                    <td className="py-3 px-3 font-mono text-slate-400">{threat.detected}</td>
+                    <td className="py-3 px-3 font-mono text-cyan-400 flex items-center space-x-2">
+                      <span className="text-base" title={threat.countryCode}>
+                        {getFlagEmoji(threat.countryCode)}
+                      </span>
+                      <span>{threat.sourceIp}</span>
+                    </td>
+                    <td className="py-3 px-3 text-slate-300">{threat.soarAction}</td>
+                    <td className="py-3 px-3">
+                      <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                        threat.riskLevel === 'CRITICAL' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                      }`}>
+                        {threat.riskLevel}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-medium ${
+                        threat.status === 'Contained' ? 'bg-emerald-500/20 text-emerald-400' :
+                        threat.status === 'In Analysis' ? 'bg-blue-500/20 text-blue-400' : 'bg-slate-700 text-slate-300'
+                      }`}>
+                        {threat.status}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 font-mono text-slate-400">{threat.incidentId}</td>
+                    <td className="py-3 px-3 text-slate-300">{threat.attackVector}</td>
+                    <td className="py-3 px-3 text-center">
+                      {threat.status !== 'Contained' ? (
+                        <button 
+                          onClick={(e) => handleResolveThreat(threat.incidentId, e)}
+                          className="bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-300 text-[10px] px-2 py-1 rounded border border-emerald-500/30 transition-colors"
+                        >
+                          Contain
+                        </button>
+                      ) : (
+                        <span className="text-slate-500 text-[10px]">Secure</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

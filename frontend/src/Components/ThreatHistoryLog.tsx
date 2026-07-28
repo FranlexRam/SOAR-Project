@@ -146,7 +146,7 @@ export default function ThreatHistoryLog({ threats }: ThreatHistoryLogProps) {
 
         {/* Contenedor con scrollbar estilizado moderno y cabecera sticky */}
         <div className="overflow-x-auto max-h-[420px] overflow-y-auto pr-2 custom-scrollbar">
-          <table className="w-full text-left text-xs text-slate-300">
+          <table className="w-full text-left text-xs text-slate-300 border-separate border-spacing-y-1">
             <thead className="bg-slate-950 text-slate-400 uppercase font-mono tracking-wider border-b border-slate-800 sticky top-0 z-10">
               <tr>
                 <th className="py-3 px-3">Type</th>
@@ -157,35 +157,45 @@ export default function ThreatHistoryLog({ threats }: ThreatHistoryLogProps) {
                 <th className="py-3 px-3">Impact</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-slate-800/20">
               {filteredData.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="text-center py-6 text-slate-500 font-mono">No hay registros que coincidan con el filtro.</td>
                 </tr>
               ) : (
-                filteredData.map((item, index) => (
-                  <tr 
-                    key={index} 
-                    onClick={() => handleSelectIncident(item)}
-                    className={`hover:bg-slate-800/40 transition-colors cursor-pointer ${selectedIncident?.incidentId === item.incidentId ? 'bg-slate-800/60' : ''}`}
-                  >
-                    <td className="py-3 px-3 font-medium text-white flex items-center space-x-2">
-                      <span>▶</span>
-                      <span>{item.type}</span>
-                    </td>
-                    <td className="py-3 px-3 font-mono text-slate-400">{item.detected}</td>
-                    <td className="py-3 px-3 font-mono text-cyan-400">{item.sourceIp}</td>
-                    <td className="py-3 px-3">
-                      <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
-                        item.riskLevel === 'CRITICAL' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                      }`}>
-                        {item.riskLevel}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 font-mono text-slate-400">{item.status}</td>
-                    <td className="py-3 px-3 font-semibold text-amber-400">{item.impact}</td>
-                  </tr>
-                ))
+                filteredData.map((item, index) => {
+                  const isSelected = selectedIncident?.incidentId === item.incidentId;
+                  
+                  // Aplicación de brillo y selección exclusivamente al elemento seleccionado por clic (Fase C)
+                  let rowStyle = "hover:bg-slate-800/40 border-slate-800/60";
+                  if (isSelected) {
+                    rowStyle = item.riskLevel === 'CRITICAL' ? 'glow-critical bg-red-950/40 border-red-500/80' : 'glow-selected bg-cyan-950/30 border-cyan-500/80';
+                  }
+
+                  return (
+                    <tr 
+                      key={index} 
+                      onClick={() => handleSelectIncident(item)}
+                      className={`transition-all duration-200 border rounded-lg cursor-pointer ${rowStyle}`}
+                    >
+                      <td className="py-3 px-3 font-medium text-white flex items-center space-x-2">
+                        <span>▶</span>
+                        <span>{item.type}</span>
+                      </td>
+                      <td className="py-3 px-3 font-mono text-slate-400">{item.detected}</td>
+                      <td className="py-3 px-3 font-mono text-cyan-400">{item.sourceIp}</td>
+                      <td className="py-3 px-3">
+                        <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                          item.riskLevel === 'CRITICAL' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                        }`}>
+                          {item.riskLevel}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 font-mono text-slate-400">{item.status}</td>
+                      <td className="py-3 px-3 font-semibold text-amber-400">{item.impact}</td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
