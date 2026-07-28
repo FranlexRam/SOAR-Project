@@ -13,7 +13,7 @@ CREDENTIALS = {
     "password": "mi_password_seguro"          # Ajusta tu contraseña real
 }
 
-# Catálogo ampliado de vectores de ataque realistas
+# Catálogo ampliado y completo de vectores de ataque soportados por el motor
 ATTACK_CATALOG = {
     "1": {
         "threat_type": "SQL_INJECTION",
@@ -67,7 +67,7 @@ ATTACK_CATALOG = {
         "status": "Contained",
         "attack_vector": "Network",
         "impact": "High",
-        "country_code": "DE"
+        "country_code": "INT" # Actualizado para usar el indicador corporativo interno
     },
     "7": {
         "threat_type": "CONTROLLED_DDOS",
@@ -77,6 +77,24 @@ ATTACK_CATALOG = {
         "attack_vector": "INFRASTRUCTURE",
         "impact": "CRITICAL",
         "country_code": "RO"
+    },
+    "8": {
+        "threat_type": "SSRF",
+        "source_ip": "172.16.0.88",
+        "risk_level": "HIGH",
+        "status": "In Analysis",
+        "attack_vector": "Internal Gateway",
+        "impact": "High",
+        "country_code": "INT" # Actualizado para usar el indicador corporativo interno
+    },
+    "9": {
+        "threat_type": "RCE",
+        "source_ip": "10.0.0.55",
+        "risk_level": "CRITICAL",
+        "status": "In Analysis",
+        "attack_vector": "Web Shell",
+        "impact": "CRITICAL",
+        "country_code": "INT" # Actualizado para usar el indicador corporativo interno
     }
 }
 
@@ -97,7 +115,6 @@ def authenticate():
 
 def send_attack(headers, attack_data):
     try:
-        # Añadir marca de tiempo dinámica para enriquecer la telemetría
         payload = attack_data.copy()
         response = requests.post(API_URL, json=payload, headers=headers)
         if response.status_code in [200, 201]:
@@ -126,8 +143,10 @@ def interactive_menu():
         print(" [5] Command Injection")
         print(" [6] Ransomware Outbreak")
         print(" [7] DDoS Controlado")
-        print(" [8] Ejecutar Lote Completo (Todos los vectores)")
-        print(" [9] Cadena de Ataque Multi-Etapa (Attack Chaining simulado)")
+        print(" [8] SSRF (Server-Side Request Forgery)")
+        print(" [9] RCE (Remote Code Execution)")
+        print(" [10] Ejecutar Lote Completo (Todos los vectores)")
+        print(" [11] Cadena de Ataque Multi-Etapa (Attack Chaining simulado)")
         print(" [0] Salir")
         print("-"*50)
         
@@ -143,23 +162,23 @@ def interactive_menu():
             send_attack(headers, selected)
             print("✨ ¡Ataque inyectado! Revisa los detalles y el timeline en tu dashboard.")
             
-        elif choice == "8":
+        elif choice == "10":
             print("\n🚀 Ejecutando lote completo de ataques de forma secuencial...")
             delay = float(input("Introduce la pausa en segundos entre cada ataque (ej. 2): ") or 2.0)
             for key, attack in ATTACK_CATALOG.items():
-                print(f" -> Lote [{key}/7]: Lanzando {attack['threat_type']}")
+                print(f" -> Lote [{key}/9]: Lanzando {attack['threat_type']}")
                 send_attack(headers, attack)
                 time.sleep(delay)
             print("✨ ¡Lote completo finalizado!")
             
-        elif choice == "9":
+        elif choice == "11":
             print("\n🔄 Iniciando Cadena de Ataque Multi-Etapa (Simulación APT Avanzada)...")
-            chain_sequence = ["3", "4", "5", "6"] # Fuerza Bruta -> Path Traversal -> Command Injection -> Ransomware
+            chain_sequence = ["3", "4", "5", "8", "9"] # Fuerza Bruta -> Path Traversal -> Command Injection -> SSRF -> RCE
             delay = float(input("Pausa entre fases de la cadena (ej. 3): ") or 3.0)
             
             for idx, step_key in enumerate(chain_sequence, 1):
                 attack = ATTACK_CATALOG[step_key]
-                print(f" 🔗 [Fase {idx}/4] Escalamiento de privilegios / Vector: {attack['threat_type']}")
+                print(f" 🔗 [Fase {idx}/5] Escalamiento de privilegios / Vector: {attack['threat_type']}")
                 send_attack(headers, attack)
                 time.sleep(delay)
                 
