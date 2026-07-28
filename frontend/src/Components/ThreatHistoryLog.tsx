@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 interface HistoryItem {
   incidentId: string;
@@ -31,7 +31,7 @@ interface ForensicReportData {
 }
 
 interface ThreatHistoryLogProps {
-  threats: any[]; // Recibe los datos centralizados en tiempo real desde App.tsx
+  threats: any[];
 }
 
 export default function ThreatHistoryLog({ threats }: ThreatHistoryLogProps) {
@@ -40,12 +40,16 @@ export default function ThreatHistoryLog({ threats }: ThreatHistoryLogProps) {
   const [filterType, setFilterType] = useState<string>('ALL');
   const [filterRisk, setFilterRisk] = useState<string>('ALL');
   
-  // Estados para el reporte forense persistente y automático de 5 secciones
   const [forensicReport, setForensicReport] = useState<ForensicReportData | null>(null);
   const [isReportLoading, setIsReportLoading] = useState<boolean>(false);
   const [reportError, setReportError] = useState<string | null>(null);
 
-  // Sincronizar y formatear los datos cada vez que 'threats' se actualice en tiempo real
+  const selectedIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    selectedIdRef.current = selectedIncident?.incidentId || null;
+  }, [selectedIncident]);
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const formatted: HistoryItem[] = threats.map((t: any) => ({
       incidentId: `T-${t.id}`,
@@ -60,9 +64,8 @@ export default function ThreatHistoryLog({ threats }: ThreatHistoryLogProps) {
 
     setHistoryData(formatted);
 
-    // Si hay un incidente seleccionado previamente, mantenerlo o seleccionar el primero por defecto
     if (formatted.length > 0) {
-      const currentSelectedExists = formatted.find(item => item.incidentId === selectedIncident?.incidentId);
+      const currentSelectedExists = formatted.find(item => item.incidentId === selectedIdRef.current);
       if (!currentSelectedExists) {
         setSelectedIncident(formatted[0]);
         fetchForensicReport(formatted[0].incidentId);
@@ -73,7 +76,6 @@ export default function ThreatHistoryLog({ threats }: ThreatHistoryLogProps) {
     }
   }, [threats]);
 
-  // Función para cargar automáticamente el reporte forense persistente al seleccionar un incidente
   const fetchForensicReport = async (incidentId: string) => {
     const token = localStorage.getItem('access_token');
     if (!token) return;
@@ -103,6 +105,7 @@ export default function ThreatHistoryLog({ threats }: ThreatHistoryLogProps) {
   };
 
   const handleSelectIncident = (item: HistoryItem) => {
+    if (selectedIncident?.incidentId === item.incidentId) return;
     setSelectedIncident(item);
     fetchForensicReport(item.incidentId);
   };
@@ -114,100 +117,104 @@ export default function ThreatHistoryLog({ threats }: ThreatHistoryLogProps) {
   });
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      {/* Tabla de Historial */}
-      <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-3">
-          <h3 className="text-white text-sm font-semibold tracking-wide uppercase">Threat History Log & Forensics</h3>
-          
-          <div className="flex items-center space-x-2 text-xs">
-            <select 
-              value={filterType} 
-              onChange={(e) => setFilterType(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-300 outline-none"
-            >
-              <option value="ALL">All Types</option>
-              <option value="SQL Injection">SQLi</option>
-              <option value="Cross-Site Scripting">XSS</option>
-              <option value="Brute Force">Brute Force</option>
-            </select>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+      {/* Tabla de Historial con altura fija estricta */}
+      <div className="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg h-[500px] flex flex-col justify-between">
+        <div>
+          <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-3">
+            <h3 className="text-white text-sm font-semibold tracking-wide uppercase">Threat History Log & Forensics</h3>
+            
+            <div className="flex items-center space-x-2 text-xs">
+              <select 
+                value={filterType} 
+                onChange={(e) => setFilterType(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-300 outline-none"
+              >
+                <option value="ALL">All Types</option>
+                <option value="SQL Injection">SQLi</option>
+                <option value="Cross-Site Scripting">XSS</option>
+                <option value="Brute Force">Brute Force</option>
+              </select>
 
-            <select 
-              value={filterRisk} 
-              onChange={(e) => setFilterRisk(e.target.value)}
-              className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-300 outline-none"
-            >
-              <option value="ALL">All Risks</option>
-              <option value="CRITICAL">Critical</option>
-              <option value="HIGH">High</option>
-            </select>
+              <select 
+                value={filterRisk} 
+                onChange={(e) => setFilterRisk(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-slate-300 outline-none"
+              >
+                <option value="ALL">All Risks</option>
+                <option value="CRITICAL">Critical</option>
+                <option value="HIGH">High</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto h-[380px] overflow-y-auto pr-2 custom-scrollbar">
+            <table className="w-full text-left text-xs text-slate-300 border-separate border-spacing-y-1">
+              <thead className="bg-slate-950 text-slate-400 uppercase font-mono tracking-wider border-b border-slate-800 sticky top-0 z-10">
+                <tr>
+                  <th className="py-3 px-3">Type</th>
+                  <th className="py-3 px-3">Detected</th>
+                  <th className="py-3 px-3">Source IP</th>
+                  <th className="py-3 px-3">Risk Level</th>
+                  <th className="py-3 px-3">Status</th>
+                  <th className="py-3 px-3">Impact</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/20">
+                {filteredData.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="text-center py-6 text-slate-500 font-mono">No hay registros que coincidan con el filtro.</td>
+                  </tr>
+                ) : (
+                  filteredData.map((item, index) => {
+                    const isSelected = selectedIncident?.incidentId === item.incidentId;
+                    
+                    let rowStyle = "hover:bg-slate-800/40 border-slate-800/60";
+                    if (isSelected) {
+                      rowStyle = item.riskLevel === 'CRITICAL' ? 'glow-critical bg-red-950/40 border-red-500/80' : 'glow-selected bg-cyan-950/30 border-cyan-500/80';
+                    }
+
+                    return (
+                      <tr 
+                        key={index} 
+                        onClick={() => handleSelectIncident(item)}
+                        className={`transition-colors duration-150 border rounded-lg cursor-pointer ${rowStyle}`}
+                      >
+                        <td className="py-3 px-3 font-medium text-white flex items-center space-x-2">
+                          <span>▶</span>
+                          <span>{item.type}</span>
+                        </td>
+                        <td className="py-3 px-3 font-mono text-slate-400">{item.detected}</td>
+                        <td className="py-3 px-3 font-mono text-cyan-400">{item.sourceIp}</td>
+                        <td className="py-3 px-3">
+                          <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                            item.riskLevel === 'CRITICAL' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                          }`}>
+                            {item.riskLevel}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 font-mono text-slate-400">{item.status}</td>
+                        <td className="py-3 px-3 font-semibold text-amber-400">{item.impact}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
 
-        {/* Contenedor con scrollbar estilizado moderno y cabecera sticky */}
-        <div className="overflow-x-auto max-h-[420px] overflow-y-auto pr-2 custom-scrollbar">
-          <table className="w-full text-left text-xs text-slate-300 border-separate border-spacing-y-1">
-            <thead className="bg-slate-950 text-slate-400 uppercase font-mono tracking-wider border-b border-slate-800 sticky top-0 z-10">
-              <tr>
-                <th className="py-3 px-3">Type</th>
-                <th className="py-3 px-3">Detected</th>
-                <th className="py-3 px-3">Source IP</th>
-                <th className="py-3 px-3">Risk Level</th>
-                <th className="py-3 px-3">Status</th>
-                <th className="py-3 px-3">Impact</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800/20">
-              {filteredData.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="text-center py-6 text-slate-500 font-mono">No hay registros que coincidan con el filtro.</td>
-                </tr>
-              ) : (
-                filteredData.map((item, index) => {
-                  const isSelected = selectedIncident?.incidentId === item.incidentId;
-                  
-                  // Aplicación de brillo y selección exclusivamente al elemento seleccionado por clic (Fase C)
-                  let rowStyle = "hover:bg-slate-800/40 border-slate-800/60";
-                  if (isSelected) {
-                    rowStyle = item.riskLevel === 'CRITICAL' ? 'glow-critical bg-red-950/40 border-red-500/80' : 'glow-selected bg-cyan-950/30 border-cyan-500/80';
-                  }
-
-                  return (
-                    <tr 
-                      key={index} 
-                      onClick={() => handleSelectIncident(item)}
-                      className={`transition-all duration-200 border rounded-lg cursor-pointer ${rowStyle}`}
-                    >
-                      <td className="py-3 px-3 font-medium text-white flex items-center space-x-2">
-                        <span>▶</span>
-                        <span>{item.type}</span>
-                      </td>
-                      <td className="py-3 px-3 font-mono text-slate-400">{item.detected}</td>
-                      <td className="py-3 px-3 font-mono text-cyan-400">{item.sourceIp}</td>
-                      <td className="py-3 px-3">
-                        <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
-                          item.riskLevel === 'CRITICAL' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                        }`}>
-                          {item.riskLevel}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3 font-mono text-slate-400">{item.status}</td>
-                      <td className="py-3 px-3 font-semibold text-amber-400">{item.impact}</td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+        <div className="pt-2 border-t border-slate-800/80 text-[10px] text-slate-500 flex justify-between">
+          <span>Total records: {filteredData.length}</span>
+          <span>Table Render Stable</span>
         </div>
       </div>
 
-      {/* Panel Lateral Forense Automático de 5 Secciones */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg flex flex-col justify-between">
+      {/* Panel Lateral Forense con altura idéntica estricta (h-[500px]) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg h-[500px] flex flex-col justify-between">
         {selectedIncident ? (
-          /* Contenedor del reporte con scrollbar personalizado */
-          <div className="space-y-4 overflow-y-auto max-h-[420px] pr-2 custom-scrollbar">
-            <div className="flex justify-between items-center border-b border-slate-800 pb-3 sticky top-0 bg-slate-900 z-10">
+          <div className="flex flex-col h-full">
+            <div className="flex justify-between items-center border-b border-slate-800 pb-3 bg-slate-900 z-10">
               <h4 className="text-white text-xs font-bold uppercase tracking-wider">
                 Incident Details: {selectedIncident.incidentId}
               </h4>
@@ -216,75 +223,76 @@ export default function ThreatHistoryLog({ threats }: ThreatHistoryLogProps) {
               </span>
             </div>
 
-            {isReportLoading ? (
-              <div className="text-center py-10 text-slate-500 font-mono text-xs">
-                Cargando informe forense y análisis automatizado...
-              </div>
-            ) : reportError ? (
-              <div className="text-center py-6 text-red-400 font-mono text-xs">
-                {reportError}
-              </div>
-            ) : forensicReport ? (
-              <>
-                {/* 1. Identificación del ataque */}
-                <div className="bg-slate-950 p-3 rounded border border-slate-800/80">
-                  <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider block mb-1">
-                    1. Identificación del Ataque
-                  </span>
-                  <div className="text-[11px] font-mono text-slate-300 space-y-1">
-                    <div><strong className="text-slate-400">Tipo:</strong> {forensicReport.identification.type}</div>
-                    <div><strong className="text-slate-400">Vector:</strong> {forensicReport.identification.vector}</div>
-                    <div><strong className="text-slate-400">Timestamp:</strong> {forensicReport.identification.timestamp}</div>
-                    <div><strong className="text-slate-400">IP Origen:</strong> {selectedIncident.sourceIp}</div>
+            <div className="relative flex-1 overflow-y-auto pr-2 custom-scrollbar my-3 space-y-3">
+              {isReportLoading && (
+                <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-xs flex items-center justify-center z-20 transition-opacity duration-150">
+                  <div className="text-purple-400 font-mono text-xs animate-pulse">
+                    Actualizando análisis forense...
                   </div>
                 </div>
+              )}
 
-                {/* 2. Análisis de peligrosidad */}
-                <div className="bg-slate-950 p-3 rounded border border-slate-800/80">
-                  <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block mb-1">
-                    2. Análisis de Peligrosidad
-                  </span>
-                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
-                    {forensicReport.danger_analysis}
-                  </p>
+              {reportError ? (
+                <div className="text-center py-6 text-red-400 font-mono text-xs">
+                  {reportError}
                 </div>
-
-                {/* 3. Riesgos potenciales */}
-                <div className="bg-slate-950 p-3 rounded border border-slate-800/80">
-                  <span className="text-[10px] font-bold text-red-400 uppercase tracking-wider block mb-2">
-                    3. Riesgos Potenciales
-                  </span>
-                  <div className="text-[11px] text-slate-300 space-y-1.5 font-sans">
-                    <div><strong className="text-slate-400">Operacional:</strong> {forensicReport.potential_risks.operational}</div>
-                    <div><strong className="text-slate-400">Financiero:</strong> {forensicReport.potential_risks.financial}</div>
-                    <div><strong className="text-slate-400">Reputación:</strong> {forensicReport.potential_risks.reputation}</div>
-                    <div><strong className="text-slate-400">Cumplimiento:</strong> {forensicReport.potential_risks.compliance}</div>
+              ) : forensicReport ? (
+                <>
+                  <div className="bg-slate-950 p-3 rounded border border-slate-800/80">
+                    <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider block mb-1">
+                      1. Identificación del Ataque
+                    </span>
+                    <div className="text-[11px] font-mono text-slate-300 space-y-1">
+                      <div><strong className="text-slate-400">Tipo:</strong> {forensicReport.identification.type}</div>
+                      <div><strong className="text-slate-400">Vector:</strong> {forensicReport.identification.vector}</div>
+                      <div><strong className="text-slate-400">Timestamp:</strong> {forensicReport.identification.timestamp}</div>
+                      <div><strong className="text-slate-400">IP Origen:</strong> {selectedIncident.sourceIp}</div>
+                    </div>
                   </div>
-                </div>
 
-                {/* 4. Recomendaciones preventivas */}
-                <div className="bg-slate-950 p-3 rounded border border-slate-800/80">
-                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block mb-2">
-                    4. Recomendaciones Preventivas
-                  </span>
-                  <ul className="text-[11px] text-slate-300 space-y-1 list-disc pl-4 font-sans">
-                    {forensicReport.preventive_recommendations.map((rec, idx) => (
-                      <li key={idx}>{rec}</li>
-                    ))}
-                  </ul>
-                </div>
+                  <div className="bg-slate-950 p-3 rounded border border-slate-800/80">
+                    <span className="text-[10px] font-bold text-amber-400 uppercase tracking-wider block mb-1">
+                      2. Análisis de Peligrosidad
+                    </span>
+                    <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                      {forensicReport.danger_analysis}
+                    </p>
+                  </div>
 
-                {/* 5. Respuesta automatizada del SOAR */}
-                <div className="bg-slate-950 p-3 rounded border border-slate-800/80">
-                  <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider block mb-1">
-                    5. Respuesta Automatizada SOAR
-                  </span>
-                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
-                    {forensicReport.soar_automated_response}
-                  </p>
-                </div>
-              </>
-            ) : null}
+                  <div className="bg-slate-950 p-3 rounded border border-slate-800/80">
+                    <span className="text-[10px] font-bold text-red-400 uppercase tracking-wider block mb-2">
+                      3. Riesgos Potenciales
+                    </span>
+                    <div className="text-[11px] text-slate-300 space-y-1.5 font-sans">
+                      <div><strong className="text-slate-400">Operacional:</strong> {forensicReport.potential_risks.operational}</div>
+                      <div><strong className="text-slate-400">Financiero:</strong> {forensicReport.potential_risks.financial}</div>
+                      <div><strong className="text-slate-400">Reputación:</strong> {forensicReport.potential_risks.reputation}</div>
+                      <div><strong className="text-slate-400">Cumplimiento:</strong> {forensicReport.potential_risks.compliance}</div>
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-950 p-3 rounded border border-slate-800/80">
+                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider block mb-2">
+                      4. Recomendaciones Preventivas
+                    </span>
+                    <ul className="text-[11px] text-slate-300 space-y-1 list-disc pl-4 font-sans">
+                      {forensicReport.preventive_recommendations.map((rec, idx) => (
+                        <li key={idx}>{rec}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="bg-slate-950 p-3 rounded border border-slate-800/80">
+                    <span className="text-[10px] font-bold text-purple-400 uppercase tracking-wider block mb-1">
+                      5. Respuesta Automatizada SOAR
+                    </span>
+                    <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                      {forensicReport.soar_automated_response}
+                    </p>
+                  </div>
+                </>
+              ) : null}
+            </div>
           </div>
         ) : (
           <div className="flex items-center justify-center h-full text-slate-500 text-xs font-mono">
@@ -292,7 +300,7 @@ export default function ThreatHistoryLog({ threats }: ThreatHistoryLogProps) {
           </div>
         )}
 
-        <div className="mt-4 pt-3 border-t border-slate-800 text-[10px] text-slate-400 flex justify-between items-center">
+        <div className="pt-3 border-t border-slate-800 text-[10px] text-slate-400 flex justify-between items-center">
           <span>Audit Log Synchronized</span>
           <span className="text-purple-400 font-mono">Persistent AI Active</span>
         </div>
